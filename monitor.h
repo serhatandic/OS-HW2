@@ -35,6 +35,9 @@ public:
         void lock() { pthread_mutex_lock(&owner->mut);}
         void unlock() { pthread_mutex_unlock(&owner->mut);}
     };
+
+    virtual ~Monitor() {
+    }
 };
 
 // when following is used as a local variable the 

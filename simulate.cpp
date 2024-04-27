@@ -3,66 +3,193 @@
 #include <utility>
 #include <pthread.h>
 #include <string>
+#include <map>
 #include <tuple>
-#include "monitor.h"
+#include <string>
+#include <queue>
+#include <time.h>
 
-class Connector: public Monitor {
+#include "monitor.h"
+#include "helper.h"
+#include "WriteOutput.h"
+
+class Car{
+public:
+    int id;
+    int travelTime;
+    std::vector<std::tuple<char, int, int, int>> path; // connector type, connector ID, from, to
+
+    Car(int id, int travelTime) : id(id), travelTime(travelTime) {}
+};
+
+class NarrowBridge: public Monitor {
 public:
     int id;
     int travelTime;
     int maxWaitTime;
-    char type;
-    int capacity;
-    int currentCount;
-    std::vector<Condition*> conditions;
-    
-    Connector(int id, int travelTime, int maxWaitTime, char type, int capacity = 0)
-        : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime), type(type), capacity(capacity), currentCount(0) {
-        // Initialize conditions based on the type of connector
-        conditions.push_back(new Condition(this)); // General condition for passing
-        if (type == 'F' || type == 'C') {
-            conditions.push_back(new Condition(this)); // Additional conditions for ferries or crossroads
-        }
+
+    bool isCarPassing = false;
+    int direction = 0;
+
+    std::vector<std::queue<Car*>> carsInLine = {std::queue<Car*>(), std::queue<Car*>()};
+
+    Condition* carPassing;
+
+    NarrowBridge(int id, int travelTime, int maxWaitTime)
+        : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime) {
+        carPassing = new Condition(this);
     }
 
+    void pass(int from, int to, Car* car) {
+        __synchronized__;
+        carsInLine[to].push(car);
+        int connectorID = this->id;
+        char connectorType = 'N';
+
+        int connectorDirection = this->direction;
+        bool carPassedBefore = false;
+
+
+        Monitor::Condition* timedwait = new Condition(this);
+        struct timespec ts;
+        
+
+        while(true){
+            // if the directions are the same, check if the bridge is empty. If the bridge is empty check if there are other cars waiting (who arrived before)
+            if (this->direction == to) {
+                if (!carsInLine.empty() && carsInLine[to].front() == car){
+                    // can pass, Sleep for PASS_DELAY milliseconds if a car has passed before
+                    if (carPassedBefore) {
+                        sleep_milli(PASS_DELAY);
+                        carPassedBefore = false;
+                    }
+                    WriteOutput(car->id, connectorType, connectorID, START_PASSING);
+                    this->isCarPassing = true;
+                    sleep_milli(travelTime);
+                    // notify the next waiting car to pass
+                    this->carPassing->notifyAll();
+                    this->isCarPassing = false;
+                    WriteOutput(car->id, connectorType, connectorID, FINISH_PASSING);
+                    // remove the car from the line
+                    this->carsInLine[to].pop();
+                    break;
+                }else {
+                    // if the bridge is empty but there are cars waiting, wait for the car to pass
+                    this->carPassing->wait();
+                    carPassedBefore = true;
+                }
+            }else if (timedwait->timedwait(&ts) == ETIMEDOUT){
+                direction = !direction;
+                // every time the direction is updated, start a new timer. If the timer reaches the maxWaitTime, change the direction
+                clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_sec += this->maxWaitTime;
+            }else if (this->carsInLine[to].empty()){
+                direction = !direction;
+                // every time the direction is updated, start a new timer. If the timer reaches the maxWaitTime, change the direction
+                clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_sec += this->maxWaitTime;
+            }else{
+                // if the bridge is empty but there are cars waiting, wait for the car to pass
+                this->carPassing->wait();
+                carPassedBefore = true;
+            }
+        }
+        
+    }
+
+    ~NarrowBridge() {
+        delete carPassing;
+    }
 };
 
-class Car: public Monitor {
+class Ferry: public Monitor {
 public:
     int id;
     int travelTime;
+    int maxWaitTime;
+    int capacity;
+    char type = 'F';
 
-    std::vector<std::tuple<char, int, int, int>> path; // connector type, connector ID, from, to
-    Car(int id, int travelTime) : id(id), travelTime(travelTime) {}
+    Condition* carPassing;
+    Condition* carInLine;
+    Condition* direction;
+
+    Ferry(int id, int travelTime, int maxWaitTime, int capacity)
+        : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime), capacity(capacity) {
+        carPassing = new Condition(this);
+        carInLine = new Condition(this);
+        direction = new Condition(this);
+    }
+
+    void pass(int from, int to, Car* car) {
+        // Implement this function
+    }
+
+    ~Ferry() {
+        delete carPassing;
+        delete carInLine;
+        delete direction;
+    }
 };
 
-std::vector<Connector> connectors;
+class Crossroad: public Monitor {
+public:
+    int id;
+    int travelTime;
+    char type = 'C';
+    std::vector<int> maxWaitTime;
+
+    Condition* carPassing;
+    Condition* carInLine;
+    Condition* direction;
+
+    Crossroad(int id, int travelTime, int maxWaitTime0, int maxWaitTime1, int maxWaitTime2, int maxWaitTime3)
+        : id(id), travelTime(travelTime), maxWaitTime(std::vector<int>{maxWaitTime0, maxWaitTime1, maxWaitTime2, maxWaitTime3}) {
+        carPassing = new Condition(this);
+        carInLine = new Condition(this);
+        direction = new Condition(this);
+    }
+
+    void pass(int from, int to, Car* car) {
+        // Implement this function
+    }
+
+    ~Crossroad() {
+        delete carPassing;
+        delete carInLine;
+        delete direction;
+    }
+};
+
+
+
+std::map<int, Monitor*> connectorMap;
 std::vector<Car> cars;
 
 void initializeConnectorsAndCars() {
     int numNarrowBridges, numFerries, numCrossroads;
     int travelTime, maxWaitTime, capacity;
-    char connectorType;
 
     // Reading narrow bridges
     std::cin >> numNarrowBridges;
     for (int i = 0; i < numNarrowBridges; ++i) {
         std::cin >> travelTime >> maxWaitTime;
-        connectors.push_back(Connector(i, travelTime, maxWaitTime, 'N'));
+        connectorMap[i] = dynamic_cast<Monitor*>(new NarrowBridge(i, travelTime, maxWaitTime));
+        
     }
 
     // Reading ferries
     std::cin >> numFerries;
     for (int i = 0; i < numFerries; ++i) {
         std::cin >> travelTime >> maxWaitTime >> capacity;
-        connectors.push_back(Connector(i + numNarrowBridges, travelTime, maxWaitTime, 'F', capacity));
+        connectorMap[i + numNarrowBridges] = dynamic_cast<Monitor*>(new Ferry(i + numNarrowBridges, travelTime, maxWaitTime, capacity));
     }
 
     // Reading crossroads
     std::cin >> numCrossroads;
     for (int i = 0; i < numCrossroads; ++i) {
         std::cin >> travelTime >> maxWaitTime;
-        connectors.push_back(Connector(i + numNarrowBridges + numFerries, travelTime, maxWaitTime, 'C'));
+        connectorMap[i + numNarrowBridges + numFerries] = dynamic_cast<Monitor*>(new Crossroad(i + numNarrowBridges + numFerries, travelTime, maxWaitTime, maxWaitTime, maxWaitTime, maxWaitTime));
     }
 
     // Reading cars
@@ -85,17 +212,77 @@ void initializeConnectorsAndCars() {
         }
         cars.push_back(newCar);
     }
-
-    // test
-    for (auto& car: cars) {
-        std::cout << "\n-----\n";
-        std::cout << car.id << " " << car.travelTime << std::endl;
-        for (auto& path: car.path) {
-            std::cout << std::get<0>(path) << " " << std::get<1>(path) << " " << std::get<2>(path) << " " << std::get<3>(path) << std::endl;
-        }
-    }
 };
 
+void* carThreadRoutine(void* arg) {
+    Car* car = static_cast<Car*>(arg);
+    for (const auto& step : car->path) {
+        char type = std::get<0>(step);
+        int connectorID = std::get<1>(step);
+        int from = std::get<2>(step);
+        int to = std::get<3>(step);
+        
+        switch (type) {
+            case 'N':{
+                NarrowBridge* conn = dynamic_cast<NarrowBridge*>(connectorMap[connectorID]);
+
+                int travelTime = car->travelTime;
+
+                WriteOutput(car->id, 'N', conn->id, TRAVEL);
+                sleep_milli(travelTime);
+                WriteOutput(car->id, 'N', conn->id, ARRIVE);
+                conn->pass(from, to, car);
+                break;
+            }
+                
+            case 'F':{
+                Ferry* conn = dynamic_cast<Ferry*>(connectorMap[connectorID]);
+
+                int travelTime = conn->travelTime;
+
+                WriteOutput(car->id, 'N', conn->id, TRAVEL);
+                sleep_milli(travelTime);
+                WriteOutput(car->id, 'N', conn->id, ARRIVE);
+                conn->pass(from, to, car);
+                break;
+            }
+                
+            case 'C':{
+                Crossroad* conn = dynamic_cast<Crossroad*>(connectorMap[connectorID]);
+                
+                int travelTime = conn->travelTime;
+
+                WriteOutput(car->id, 'N', conn->id, TRAVEL);
+                sleep_milli(travelTime);
+                WriteOutput(car->id, 'N', conn->id, ARRIVE);
+                conn->pass(from, to, car);
+                break;
+            }
+                
+        }
+    }
+    return nullptr;
+}
+
+
+
+
+
 int main() {
+    InitWriteOutput();
     initializeConnectorsAndCars();
+
+    std::vector<pthread_t> threads(cars.size());
+    for (size_t i = 0; i < cars.size(); ++i) {
+        pthread_create(&threads[i], nullptr, carThreadRoutine, &cars[i]);
+    }
+
+    for (auto& thread : threads) {
+        pthread_join(thread, nullptr);
+    }
+
+    // Clean up
+    for (auto& connector : connectorMap) {
+        delete connector.second;
+    }
 }
