@@ -27,9 +27,9 @@ public:
     int id;
     int travelTime;
     int maxWaitTime;
-
     int direction = 0;
 
+    std::vector<bool> carPassedBefore = {false, false};
     std::vector<std::queue<Car*>> carsInLine = {std::queue<Car*>(), std::queue<Car*>()};
 
     pthread_mutex_t  mut2;
@@ -52,33 +52,30 @@ public:
 
         __synchronized__;
         int connectorID = this->id;
-        char connectorType = 'N';
-
-        bool carPassedBefore = false;
-
-        
+        char connectorType = 'N';        
 
         while(true){
             if (this->direction == to) {
                 if (carsInLine[to].front() == car){
-                    if (carPassedBefore) {
+                    if (carPassedBefore[to]){
                         sleep_milli(PASS_DELAY);
-                        carPassedBefore = false;
                     }
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
+                    carPassedBefore[to] = true;
                     lineCondition->notifyAll();
 
                     this->carsInLine[to].pop();
                     break;
                 }else {
-                    carPassedBefore = true;
                     lineCondition->wait();
                 }
             }else if (this->carsInLine[from].empty()){
+                carPassedBefore[to] = false;
                 direction = !direction;
                 directionCondition->notifyAll();
 
             }else{
+                carPassedBefore[to] = false;
                 directionCondition->wait(); 
             }
         }
