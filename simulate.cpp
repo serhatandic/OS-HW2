@@ -29,6 +29,8 @@ public:
     int maxWaitTime;
     int direction = 0;
 
+    struct timespec lastSwitchTime;
+
     std::vector<bool> carPassedBefore = {false, false};
     std::vector<std::queue<Car*>> carsInLine = {std::queue<Car*>(), std::queue<Car*>()};
 
@@ -40,6 +42,7 @@ public:
     NarrowBridge(int id, int travelTime, int maxWaitTime)
         : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime) {
             pthread_mutex_init(&mut2, NULL);
+            clock_gettime(CLOCK_REALTIME, &lastSwitchTime); // Initialize last switch time
     }
 
     void pass(int from, int to, Car* car) {
@@ -69,15 +72,28 @@ public:
                 }else {
                     lineCondition->wait();
                 }
-            }else if (this->carsInLine[from].empty()){
-                carPassedBefore[to] = false;
-                direction = !direction;
-                directionCondition->notifyAll();
-
             }else{
-                carPassedBefore[to] = false;
-                directionCondition->wait(); 
+                timespec ts;
+                clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_sec += maxWaitTime / 1000;
+
+                if (carsInLine[from].empty() || directionCondition->timedwait(&ts) == ETIMEDOUT) {
+                    carPassedBefore[to] = false;
+                    direction = !direction;
+                    directionCondition->notifyAll();
+                }
             }
+            
+            
+            // else if (this->carsInLine[from].empty()){
+            //     carPassedBefore[to] = false;
+            //     direction = !direction;
+            //     directionCondition->notifyAll();
+
+            // }else{
+            //     carPassedBefore[to] = false;
+            //     directionCondition->wait(); 
+            // }
         }
         
     }
