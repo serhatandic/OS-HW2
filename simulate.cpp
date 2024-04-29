@@ -49,9 +49,9 @@ public:
 
     void pass(int from, int to, Car* car) {
         pthread_mutex_lock(&mut2);
-        WriteOutput(car->id, 'N', this->id, ARRIVE);
 
         carsInLine[to].push(car);
+        WriteOutput(car->id, 'N', this->id, ARRIVE);
 
         pthread_mutex_unlock(&mut2);
         __synchronized__;
@@ -73,12 +73,14 @@ public:
                         struct timespec tmp_ts;
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
+                        tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
                         sleepCondition->timedwait(&tmp_ts);
                     }
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
                     carPassedBefore[to] = false;
                     lineCondition->notifyAll();
+
                     this->carsInLine[to].pop();
                     numOfCarsMovingTo[to]++;
                     if (this->carsInLine[to].empty()){
@@ -100,25 +102,20 @@ public:
                 }
                 
             }
-            
-            
-            // else if (this->carsInLine[from].empty()){
-            //     carPassedBefore[to] = false;
-            //     direction = !direction;
-            //     directionCondition->notifyAll();
-
-            // }else{
-            //     carPassedBefore[to] = false;
-            //     directionCondition->wait(); 
-            // }
         }
         
     }
 
     void finishPassing(Car* car, int from, int to) {
-        sleep_milli(travelTime);
         __synchronized__;
         carPassedBefore[to] = false;
+
+        struct timespec tmp_ts;
+        clock_gettime(CLOCK_REALTIME, &tmp_ts);
+        tmp_ts.tv_sec += travelTime / 1000;
+        tmp_ts.tv_nsec += (travelTime % 1000) * 1000000;
+        sleepCondition->timedwait(&tmp_ts);
+        
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
         numOfCarsMovingTo[to]--;
         if (numOfCarsMovingTo[to] == 0){
@@ -253,7 +250,6 @@ void* carThreadRoutine(void* arg) {
         int to = std::get<3>(step);
         WriteOutput(car->id, type, connectorID, TRAVEL);
         sleep_milli(car->travelTime);
-
         switch (type) {
             case 'N':{
                 NarrowBridge* conn = dynamic_cast<NarrowBridge*>(connectorMap['N'][connectorID]);
