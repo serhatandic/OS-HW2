@@ -74,11 +74,16 @@ public:
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
                         tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
                         sleepCondition->timedwait(&tmp_ts);
+
+                        if (direction != to){
+                            lineCondition->notifyAll();
+                            continue;
+                        }
                     }
                     shouldBePassDelay = true;
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
-                    lineCondition->notify();
+                    lineCondition->notifyAll();
 
                     this->carsInLine[to].pop();
                     numOfCarsMovingTo[to]++;
@@ -87,13 +92,23 @@ public:
                 }else {
                     lineCondition->wait();
                 }
+            }else if(carsInLine[from].empty() && numOfCarsMovingTo[from] == 0){
+                directionCondition->notifyAll();
+                direction = !direction;
+                shouldBePassDelay = false;
             }else{
                 timespec ts;
                 clock_gettime(CLOCK_REALTIME, &ts);
                 ts.tv_sec += maxWaitTime / 1000;
-                if ((carsInLine[from].empty() && numOfCarsMovingTo[from] == 0) || directionCondition->timedwait(&ts) == ETIMEDOUT) {
+                ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
+  
+                int result = directionCondition->timedwait(&ts);
+
+                if(direction != to) {
+                    if(result == ETIMEDOUT) {
+                        directionCondition->notifyAll();
+                    }
                     direction = !direction;
-                    directionCondition->notify();
                     shouldBePassDelay = false;
                 }
                 
@@ -108,9 +123,11 @@ public:
         
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
         numOfCarsMovingTo[to]--;
-        if (numOfCarsMovingTo[to] == 0 && carsInLine[to].empty()){
-            directionCondition->notify();
-            waitReversePassingCars->notify();
+        if (numOfCarsMovingTo[to] == 0){
+            if (carsInLine[to].empty()){
+                directionCondition->notifyAll();
+            }
+            waitReversePassingCars->notifyAll();
         }
     }
 
