@@ -28,6 +28,7 @@ public:
     int travelTime;
     int maxWaitTime;
     int direction = 0;
+    int numOfPassingCars = 0;
 
     struct timespec lastSwitchTime;
 
@@ -64,6 +65,7 @@ public:
                         sleep_milli(PASS_DELAY);
                     }
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
+                    numOfPassingCars++;
                     carPassedBefore[to] = true;
                     lineCondition->notifyAll();
 
@@ -77,7 +79,7 @@ public:
                 clock_gettime(CLOCK_REALTIME, &ts);
                 ts.tv_sec += maxWaitTime / 1000;
 
-                if (carsInLine[from].empty() || directionCondition->timedwait(&ts) == ETIMEDOUT) {
+                if (numOfPassingCars == 0 &&  (carsInLine[from].empty() || directionCondition->timedwait(&ts) == ETIMEDOUT)) {
                     carPassedBefore[to] = false;
                     direction = !direction;
                     directionCondition->notifyAll();
@@ -100,6 +102,9 @@ public:
 
     void finishPassing(Car* car, int from, int to) {
         sleep_milli(travelTime);
+        pthread_mutex_lock(&mut2);
+        numOfPassingCars--;
+        pthread_mutex_unlock(&mut2);
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
     }
 
