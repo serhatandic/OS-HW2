@@ -65,10 +65,9 @@ public:
 
         while(true){
             if (this->direction == to) {
-                if (carsInLine[to].front() == car){
-                    if (numOfCarsMovingTo[from] > 0){ // there was a car on the bridge during the direction switch, wait for it to pass
+                if (numOfCarsMovingTo[from] > 0){ // there was a car on the bridge during the direction switch, wait for it to pass
                         waitReversePassingCars->wait();
-                    }
+                }else if (carsInLine[to].front() == car){
                     if (shouldBePassDelay){
                         struct timespec tmp_ts;
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
