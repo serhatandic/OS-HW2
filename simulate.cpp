@@ -142,28 +142,49 @@ public:
     int id;
     int travelTime;
     int maxWaitTime;
-    int capacity;
+    int capacity = 0;
     char type = 'F';
 
-    Condition* carPassing;
-    Condition* carInLine;
-    Condition* direction;
+    int numOfCars = 0;
+    Condition* start_passing_condition = new Condition(this);
+    Condition* finish_passing_condition = new Condition(this);
+    Condition* sleepCondition = new Condition(this);
 
     Ferry(int id, int travelTime, int maxWaitTime, int capacity)
         : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime), capacity(capacity) {
-        carPassing = new Condition(this);
-        carInLine = new Condition(this);
-        direction = new Condition(this);
     }
 
     void pass(int from, int to, Car* car) {
-        // Implement this function
+        __synchronized__;
+        numOfCars++;
+        WriteOutput(car->id, type, this->id, ARRIVE);
+        if (numOfCars == capacity){
+            WriteOutput(car->id, type, this->id, START_PASSING);
+            for (int i = 0; i < capacity - 1; i++){
+                start_passing_condition->notifyAll();
+            }
+        }else{
+            timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += maxWaitTime / 1000;
+            ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
+
+            start_passing_condition->timedwait(&ts);
+
+            WriteOutput(car->id, type, this->id, START_PASSING);
+        }
+        numOfCars = 0;
+    }
+
+    void finishPassing(Car* car, int from, int to) {
+        sleep_milli(travelTime);
+        __synchronized__;
+        WriteOutput(car->id, type, this->id, FINISH_PASSING);
     }
 
     ~Ferry() {
-        delete carPassing;
-        delete carInLine;
-        delete direction;
+        delete start_passing_condition;
+        delete finish_passing_condition;
     }
 };
 
@@ -271,7 +292,7 @@ void* carThreadRoutine(void* arg) {
                 Ferry* conn = dynamic_cast<Ferry*>(connectorMap['F'][connectorID]);
 
                 conn->pass(from, to, car);
-
+                conn->finishPassing(car, from, to);
                 break;
             }
                 
