@@ -79,13 +79,13 @@ public:
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
                     carPassedBefore[to] = false;
-                    lineCondition->notifyAll();
+                    lineCondition->notify();
 
                     this->carsInLine[to].pop();
                     numOfCarsMovingTo[to]++;
                     if (this->carsInLine[to].empty()){
                         direction = !direction;
-                        directionCondition->notifyAll();
+                        directionCondition->notify();
                     }
                     break;
                 }else {
@@ -98,7 +98,7 @@ public:
                 ts.tv_sec += maxWaitTime / 1000;
                 if (carsInLine[from].empty() || directionCondition->timedwait(&ts) == ETIMEDOUT) {
                     direction = !direction;
-                    directionCondition->notifyAll();
+                    directionCondition->notify();
                 }
                 
             }
@@ -107,19 +107,20 @@ public:
     }
 
     void finishPassing(Car* car, int from, int to) {
+        sleep_milli(travelTime);
         __synchronized__;
         carPassedBefore[to] = false;
 
-        struct timespec tmp_ts;
-        clock_gettime(CLOCK_REALTIME, &tmp_ts);
-        tmp_ts.tv_sec += travelTime / 1000;
-        tmp_ts.tv_nsec += (travelTime % 1000) * 1000000;
-        sleepCondition->timedwait(&tmp_ts);
+        // struct timespec tmp_ts;
+        // clock_gettime(CLOCK_REALTIME, &tmp_ts);
+        // tmp_ts.tv_sec += travelTime / 1000;
+        // tmp_ts.tv_nsec += (travelTime % 1000) * 1000000;
+        // sleepCondition->timedwait(&tmp_ts);
         
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
         numOfCarsMovingTo[to]--;
         if (numOfCarsMovingTo[to] == 0){
-            waitReversePassingCars->notifyAll();
+            waitReversePassingCars->notify();
         }
     }
 
