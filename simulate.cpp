@@ -36,13 +36,14 @@ public:
     std::vector<std::queue<Car*>> carsInLine = {std::queue<Car*>(), std::queue<Car*>()};
 
     pthread_mutex_t  mut2;
-
+    pthread_mutex_t  carPassingMutex;
     Condition* lineCondition = new Condition(this);
     Condition* directionCondition = new Condition(this);
 
     NarrowBridge(int id, int travelTime, int maxWaitTime)
         : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime) {
             pthread_mutex_init(&mut2, NULL);
+            pthread_mutex_init(&carPassingMutex, NULL);
             clock_gettime(CLOCK_REALTIME, &lastSwitchTime); // Initialize last switch time
     }
 
@@ -61,11 +62,13 @@ public:
         while(true){
             if (this->direction == to) {
                 if (carsInLine[to].front() == car){
+                    pthread_mutex_lock(&carPassingMutex);
+                    numOfPassingCars++;
+                    pthread_mutex_unlock(&carPassingMutex);
                     if (carPassedBefore[to]){
                         sleep_milli(PASS_DELAY);
                     }
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
-                    numOfPassingCars++;
                     carPassedBefore[to] = true;
                     lineCondition->notifyAll();
 
@@ -78,12 +81,13 @@ public:
                 timespec ts;
                 clock_gettime(CLOCK_REALTIME, &ts);
                 ts.tv_sec += maxWaitTime / 1000;
-
+                pthread_mutex_lock(&carPassingMutex);
                 if (numOfPassingCars == 0 &&  (carsInLine[from].empty() || directionCondition->timedwait(&ts) == ETIMEDOUT)) {
                     carPassedBefore[to] = false;
                     direction = !direction;
                     directionCondition->notifyAll();
                 }
+                pthread_mutex_unlock(&carPassingMutex);
             }
             
             
@@ -101,10 +105,10 @@ public:
     }
 
     void finishPassing(Car* car, int from, int to) {
-        sleep_milli(travelTime);
-        pthread_mutex_lock(&mut2);
+        pthread_mutex_lock(&carPassingMutex);
         numOfPassingCars--;
-        pthread_mutex_unlock(&mut2);
+        pthread_mutex_unlock(&carPassingMutex);
+        sleep_milli(travelTime);
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
     }
 
@@ -112,6 +116,7 @@ public:
         delete lineCondition;
         delete directionCondition;
         pthread_mutex_destroy(&mut2);
+        pthread_mutex_destroy(&carPassingMutex);
     }
 };
 
