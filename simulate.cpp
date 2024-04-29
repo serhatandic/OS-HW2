@@ -83,10 +83,7 @@ public:
 
                     this->carsInLine[to].pop();
                     numOfCarsMovingTo[to]++;
-                    if (this->carsInLine[to].empty()){
-                        direction = !direction;
-                        directionCondition->notify();
-                    }
+
                     break;
                 }else {
                     lineCondition->wait();
@@ -96,7 +93,7 @@ public:
                 timespec ts;
                 clock_gettime(CLOCK_REALTIME, &ts);
                 ts.tv_sec += maxWaitTime / 1000;
-                if (carsInLine[from].empty() || directionCondition->timedwait(&ts) == ETIMEDOUT) {
+                if ((carsInLine[from].empty() && numOfCarsMovingTo[from] == 0) || directionCondition->timedwait(&ts) == ETIMEDOUT) {
                     direction = !direction;
                     directionCondition->notify();
                 }
@@ -119,7 +116,8 @@ public:
         
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
         numOfCarsMovingTo[to]--;
-        if (numOfCarsMovingTo[to] == 0){
+        if (numOfCarsMovingTo[to] == 0 && carsInLine[to].empty()){
+            directionCondition->notify();
             waitReversePassingCars->notify();
         }
     }
