@@ -28,10 +28,10 @@ public:
     int travelTime;
     int maxWaitTime;
     int direction = -1;
+    bool shouldBePassDelay = false;
 
     struct timespec lastSwitchTime;
 
-    std::vector<bool> carPassedBefore = {false, false};
     std::vector<int> numOfCarsMovingTo = {0, 0};
     std::vector<std::queue<Car*>> carsInLine = {std::queue<Car*>(), std::queue<Car*>()};
 
@@ -69,16 +69,16 @@ public:
                     if (numOfCarsMovingTo[from] > 0){ // there was a car on the bridge during the direction switch, wait for it to pass
                         waitReversePassingCars->wait();
                     }
-                    if (carPassedBefore[to]){
+                    if (shouldBePassDelay){
                         struct timespec tmp_ts;
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
                         tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
                         sleepCondition->timedwait(&tmp_ts);
                     }
+                    shouldBePassDelay = true;
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
-                    carPassedBefore[to] = false;
                     lineCondition->notify();
 
                     this->carsInLine[to].pop();
@@ -87,7 +87,6 @@ public:
                     break;
                 }else {
                     lineCondition->wait();
-                    carPassedBefore[to] = true;
                 }
             }else{
                 timespec ts;
@@ -96,6 +95,7 @@ public:
                 if ((carsInLine[from].empty() && numOfCarsMovingTo[from] == 0) || directionCondition->timedwait(&ts) == ETIMEDOUT) {
                     direction = !direction;
                     directionCondition->notify();
+                    shouldBePassDelay = false;
                 }
                 
             }
@@ -106,13 +106,6 @@ public:
     void finishPassing(Car* car, int from, int to) {
         sleep_milli(travelTime);
         __synchronized__;
-        carPassedBefore[to] = false;
-
-        // struct timespec tmp_ts;
-        // clock_gettime(CLOCK_REALTIME, &tmp_ts);
-        // tmp_ts.tv_sec += travelTime / 1000;
-        // tmp_ts.tv_nsec += (travelTime % 1000) * 1000000;
-        // sleepCondition->timedwait(&tmp_ts);
         
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
         numOfCarsMovingTo[to]--;
