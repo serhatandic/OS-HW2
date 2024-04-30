@@ -251,7 +251,7 @@ public:
                             continue;
                         }
                     }
-                    shouldBePassDelay = true;
+                    // shouldBePassDelay = true;
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
                     lineCondition->notifyAll();
