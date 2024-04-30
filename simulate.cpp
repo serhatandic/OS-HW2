@@ -306,6 +306,10 @@ public:
             if (carsInLine[from].empty()){
                 while (carsInLine[direction].empty()){
                     direction = (direction + 1) % 4;
+                    // check if i am the last car of all directions
+                    if (carsInLine[(direction + 1) % 4].empty() && carsInLine[(direction + 2) % 4].empty() && carsInLine[(direction + 3) % 4].empty()){
+                        break;
+                    }
                 }
                 directionConditions[direction]->notifyAll();
             }
