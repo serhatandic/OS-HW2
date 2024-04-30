@@ -309,7 +309,7 @@ public:
         sleep_milli(travelTime);
         __synchronized__;
         
-        WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
+        WriteOutput(car->id, 'C', this->id, FINISH_PASSING);
         numOfCarsMovingFrom[from]--;
         if (numOfCarsMovingFrom[from] == 0){
             if (carsInLine[from].empty()){
