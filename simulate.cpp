@@ -261,7 +261,16 @@ public:
 
                     break;
                 }else {
-                    lineCondition->wait();
+                    struct timespec tmp_ts;
+                    clock_gettime(CLOCK_REALTIME, &tmp_ts);
+                    tmp_ts.tv_sec += PASS_DELAY / 1000;
+                    tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
+                    int res = lineCondition->timedwait(&tmp_ts);
+                    if (res == ETIMEDOUT){
+                        shouldBePassDelay = false;
+                    }else{
+                        shouldBePassDelay = true;
+                    }
                 }
                 // on the next else if block, we should check 
                 // if not we can change the direction
