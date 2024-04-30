@@ -193,27 +193,131 @@ public:
     int id;
     int travelTime;
     char type = 'C';
-    std::vector<int> maxWaitTime;
+    int maxWaitTime;
 
-    Condition* carPassing;
-    Condition* carInLine;
-    Condition* direction;
+    int direction = -1;
+    bool shouldBePassDelay = false;
 
-    Crossroad(int id, int travelTime, int maxWaitTime0, int maxWaitTime1, int maxWaitTime2, int maxWaitTime3)
-        : id(id), travelTime(travelTime), maxWaitTime(std::vector<int>{maxWaitTime0, maxWaitTime1, maxWaitTime2, maxWaitTime3}) {
-        carPassing = new Condition(this);
-        carInLine = new Condition(this);
-        direction = new Condition(this);
+    struct timespec lastSwitchTime;
+
+    std::vector<int> numOfCarsMovingFrom = {0, 0, 0, 0};
+    std::vector<std::queue<Car*>> carsInLine = {std::queue<Car*>(), std::queue<Car*>(), std::queue<Car*>(), std::queue<Car*>()};
+
+    pthread_mutex_t  mut2;
+
+    Condition* lineCondition = new Condition(this);
+    std::vector<Condition*> directionConditions = {new Condition(this), new Condition(this), new Condition(this), new Condition(this)};
+    Condition* sleepCondition = new Condition(this);
+    Condition* waitReversePassingCars = new Condition(this);
+    
+    Crossroad(int id, int travelTime, int maxWaitTime)
+        : id(id), travelTime(travelTime), maxWaitTime(maxWaitTime) {
+        pthread_mutex_init(&mut2, NULL);
     }
 
-    void pass(int from, int to, Car* car) {
-        // Implement this function
+    void pass(int from, Car* car) {
+        pthread_mutex_lock(&mut2);
+
+        carsInLine[from].push(car);
+        WriteOutput(car->id, 'C', this->id, ARRIVE);
+
+        pthread_mutex_unlock(&mut2);
+        __synchronized__;
+
+        if (direction == -1) {
+            direction = from;
+        }
+
+        int connectorID = this->id;
+        char connectorType = 'C';        
+
+        while(true){
+            if (this->direction == from) {
+                // there was a car on the bridge during the direction switch, wait for it to pass
+                // check all directions except the current one 
+                if (numOfCarsMovingFrom[(from + 1) % 4] > 0 || numOfCarsMovingFrom[(from + 2) % 4] > 0 || numOfCarsMovingFrom[(from + 3) % 4] > 0){ 
+                    waitReversePassingCars->wait();
+                }else if (carsInLine[from].front() == car){
+                    if (shouldBePassDelay){
+                        struct timespec tmp_ts;
+                        clock_gettime(CLOCK_REALTIME, &tmp_ts);
+                        tmp_ts.tv_sec += PASS_DELAY / 1000;
+                        tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
+                        sleepCondition->timedwait(&tmp_ts);
+
+                        // there was a direction change during the delay
+                        if (direction != from){
+                            lineCondition->notifyAll();
+                            continue;
+                        }
+                    }
+                    shouldBePassDelay = true;
+                    
+                    WriteOutput(car->id, connectorType, connectorID, START_PASSING);
+                    lineCondition->notifyAll();
+
+                    this->carsInLine[from].pop();
+                    numOfCarsMovingFrom[from]++;
+
+                    break;
+                }else {
+                    lineCondition->wait();
+                }
+                // on the next else if block, we should check 
+                // if not we can change the direction
+            }else if(carsInLine[direction].empty() && numOfCarsMovingFrom[direction] == 0){
+                // • Next active direction is determined by incrementing numbers in a circular way. Next active direction's waiting line shouldn't be empty. If empty the direction should be changed again.
+                // should notify the next direction
+                while (carsInLine[direction].empty() && numOfCarsMovingFrom[direction] == 0){
+                    direction = (direction + 1) % 4;
+                }
+                directionConditions[direction]->notifyAll();
+                shouldBePassDelay = false;
+            }else{
+                timespec ts;
+                clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_sec += maxWaitTime / 1000;
+                ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
+  
+                int result = directionConditions[from]->timedwait(&ts);
+
+                // if(direction != from) {
+                    if(result == ETIMEDOUT) {
+                        while (carsInLine[direction].empty()){
+                            direction = (direction + 1) % 4;
+                        }
+                        directionConditions[direction]->notifyAll();
+                    }
+                    shouldBePassDelay = false;
+                // }
+                
+            }
+        }
+        
+    }
+
+    void finishPassing(Car* car, int from) {
+        sleep_milli(travelTime);
+        __synchronized__;
+        
+        WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
+        numOfCarsMovingFrom[from]--;
+        if (numOfCarsMovingFrom[from] == 0){
+            if (carsInLine[from].empty()){
+                while (carsInLine[direction].empty()){
+                    direction = (direction + 1) % 4;
+                }
+                directionConditions[direction]->notifyAll();
+            }
+            waitReversePassingCars->notifyAll();
+        }
     }
 
     ~Crossroad() {
-        delete carPassing;
-        delete carInLine;
-        delete direction;
+        delete lineCondition;
+        for (auto condition : directionConditions) {
+            delete condition;
+        }
     }
 };
 
@@ -245,7 +349,7 @@ void initializeConnectorsAndCars() {
     std::cin >> numCrossroads;
     for (int i = 0; i < numCrossroads; ++i) {
         std::cin >> travelTime >> maxWaitTime;
-        connectorMap['C'].push_back(dynamic_cast<Monitor*>(new Crossroad(i + numNarrowBridges + numFerries, travelTime, maxWaitTime, maxWaitTime, maxWaitTime, maxWaitTime)));
+        connectorMap['C'].push_back(dynamic_cast<Monitor*>(new Crossroad(i + numNarrowBridges + numFerries, travelTime, maxWaitTime)));
     }
 
     // Reading cars
@@ -299,7 +403,8 @@ void* carThreadRoutine(void* arg) {
             case 'C':{
                 Crossroad* conn = dynamic_cast<Crossroad*>(connectorMap['C'][connectorID]);
             
-                conn->pass(from, to, car);
+                conn->pass(from, car);
+                conn->finishPassing(car, from);
                 break;
             }
                 
