@@ -170,7 +170,10 @@ public:
             ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
 
             start_passing_condition->timedwait(&ts);
-
+            // notify everyone else
+            for (int i = 0; i < numOfCars - 1; i++){
+                start_passing_condition->notifyAll();
+            }
             WriteOutput(car->id, type, this->id, START_PASSING);
         }
         numOfCars = 0;
@@ -290,7 +293,7 @@ public:
   
                 int result = directionConditions[from]->timedwait(&ts);
 
-                // if(direction != from) {
+                if(direction != from) {
                     if(result == ETIMEDOUT) {
                         while (carsInLine[direction].empty()){
                             direction = (direction + 1) % 4;
@@ -298,7 +301,7 @@ public:
                         directionConditions[direction]->notifyAll();
                     }
                     shouldBePassDelay = false;
-                // }
+                }
                 
             }
         }
