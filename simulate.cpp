@@ -160,9 +160,11 @@ public:
     void pass(int from, int to, Car* car) {
         __synchronized__;
         numOfCars++;
+        // std::cout << "num of cars is " << numOfCars << std::endl;
         WriteOutput(car->id, type, this->id, ARRIVE);
         if (numOfCars == capacity){
             WriteOutput(car->id, type, this->id, START_PASSING);
+            numOfCars = 0;
             for (int i = 0; i < capacity - 1; i++){
                 start_passing_condition->notifyAll();
             }
@@ -172,14 +174,16 @@ public:
             ts.tv_sec += maxWaitTime / 1000;
             ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
 
-            start_passing_condition->timedwait(&ts);
-            // notify everyone else
-            for (int i = 0; i < numOfCars - 1; i++){
-                start_passing_condition->notifyAll();
+            int res = start_passing_condition->timedwait(&ts);
+            if (res == ETIMEDOUT){
+                for (int i = 0; i < numOfCars - 1; i++){
+                    start_passing_condition->notifyAll();
+                }
+                numOfCars = 0;
             }
+            // if it is not timeout then the cars are already notified
             WriteOutput(car->id, type, this->id, START_PASSING);
         }
-        numOfCars = 0;
     }
 
     void finishPassing(Car* car, int from, int to) {
