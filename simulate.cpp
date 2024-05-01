@@ -259,7 +259,7 @@ public:
                             continue;
                         }
                     }
-                    shouldBePassDelay = true;
+                    // shouldBePassDelay = true;
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
                     numOfCarsPassing++;
@@ -281,7 +281,7 @@ public:
                     direction = (direction + 1) % 4;
                 }
                 directionConditions[direction]->notifyAll();
-                shouldBePassDelay = false;
+                // shouldBePassDelay = false;
             }else{
                 timespec ts;
                 clock_gettime(CLOCK_REALTIME, &ts);
@@ -297,7 +297,7 @@ public:
                         }
                         directionConditions[direction]->notifyAll();
                     }
-                    shouldBePassDelay = false;
+                    // shouldBePassDelay = false;
                 }
                 
             }
