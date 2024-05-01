@@ -157,6 +157,7 @@ public:
     void pass(int from, int to, Car* car) {
         Monitor::Lock lock(this);
         numOfCars++;
+        // std::cout << "num of cars is " << numOfCars << std::endl;
         WriteOutput(car->id, type, this->id, ARRIVE);
         if (numOfCars == capacity){
             WriteOutput(car->id, type, this->id, START_PASSING);
