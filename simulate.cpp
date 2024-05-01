@@ -29,7 +29,7 @@ public:
     int maxWaitTime;
     int direction = -1;
     bool shouldBePassDelay = false;
-
+    int numOfCarsPassing = 0;
     struct timespec lastSwitchTime;
 
     std::vector<int> numOfCarsMovingTo = {0, 0};
@@ -68,7 +68,7 @@ public:
                 if (numOfCarsMovingTo[from] > 0){ // there was a car on the bridge during the direction switch, wait for it to pass
                         waitReversePassingCars->wait();
                 }else if (carsInLine[to].front() == car){
-                    if (shouldBePassDelay){
+                    if (numOfCarsPassing > 0){
                         struct timespec tmp_ts;
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
@@ -80,9 +80,11 @@ public:
                             continue;
                         }
                     }
-                    shouldBePassDelay = true;
+                    // shouldBePassDelay = true;
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
+                    numOfCarsPassing++;
+
                     lineCondition->notifyAll();
 
                     this->carsInLine[to].pop();
@@ -95,7 +97,7 @@ public:
             }else if(carsInLine[from].empty() && numOfCarsMovingTo[from] == 0){
                 directionCondition->notifyAll();
                 direction = !direction;
-                shouldBePassDelay = false;
+                // shouldBePassDelay = false;
             }else{
                 timespec ts;
                 clock_gettime(CLOCK_REALTIME, &ts);
@@ -109,7 +111,7 @@ public:
                         directionCondition->notifyAll();
                     }
                     direction = !direction;
-                    shouldBePassDelay = false;
+                    // shouldBePassDelay = false;
                 }
                 
             }
@@ -122,6 +124,7 @@ public:
         __synchronized__;
         
         WriteOutput(car->id, 'N', this->id, FINISH_PASSING);
+        numOfCarsPassing--;
         numOfCarsMovingTo[to]--;
         if (numOfCarsMovingTo[to] == 0){
             if (carsInLine[to].empty()){
@@ -201,6 +204,8 @@ public:
     int direction = -1;
     bool shouldBePassDelay = false;
 
+    int numOfCarsPassing = 0;
+
     struct timespec lastSwitchTime;
 
     std::vector<int> numOfCarsMovingFrom = {0, 0, 0, 0};
@@ -241,7 +246,7 @@ public:
                 if (numOfCarsMovingFrom[(from + 1) % 4] > 0 || numOfCarsMovingFrom[(from + 2) % 4] > 0 || numOfCarsMovingFrom[(from + 3) % 4] > 0){ 
                     waitReversePassingCars->wait();
                 }else if (carsInLine[from].front() == car){
-                    if (shouldBePassDelay){
+                    if (numOfCarsPassing > 0){
                         struct timespec tmp_ts;
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
@@ -254,9 +259,10 @@ public:
                             continue;
                         }
                     }
-                    // shouldBePassDelay = true;
+                    shouldBePassDelay = true;
                     
                     WriteOutput(car->id, connectorType, connectorID, START_PASSING);
+                    numOfCarsPassing++;
                     lineCondition->notifyAll();
 
                     this->carsInLine[from].pop();
@@ -264,16 +270,7 @@ public:
 
                     break;
                 }else {
-                    struct timespec tmp_ts;
-                    clock_gettime(CLOCK_REALTIME, &tmp_ts);
-                    tmp_ts.tv_sec += PASS_DELAY / 1000;
-                    tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
-                    int res = lineCondition->timedwait(&tmp_ts);
-                    if (res == ETIMEDOUT){
-                        shouldBePassDelay = false;
-                    }else{
-                        shouldBePassDelay = true;
-                    }
+                    lineCondition->wait();
                 }
                 // on the next else if block, we should check 
                 // if not we can change the direction
@@ -314,6 +311,7 @@ public:
         
         WriteOutput(car->id, 'C', this->id, FINISH_PASSING);
         numOfCarsMovingFrom[from]--;
+        numOfCarsPassing--;
         if (numOfCarsMovingFrom[from] == 0){
             if (carsInLine[from].empty()){
                 while (carsInLine[direction].empty()){
