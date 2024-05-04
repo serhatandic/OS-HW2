@@ -73,6 +73,12 @@ public:
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
                         tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
+
+                        if (tmp_ts.tv_nsec >= 1000000000) {
+                            tmp_ts.tv_sec += tmp_ts.tv_nsec / 1000000000; 
+                            tmp_ts.tv_nsec %= 1000000000;                
+                        }
+
                         sleepCondition->timedwait(&tmp_ts);
 
                         if (direction != to){
@@ -104,6 +110,10 @@ public:
                 ts.tv_sec += maxWaitTime / 1000;
                 ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
   
+                if (ts.tv_nsec >= 1000000000) {
+                        ts.tv_sec += ts.tv_nsec / 1000000000; 
+                        ts.tv_nsec %= 1000000000;                
+                }  
                 int result = directionCondition->timedwait(&ts);
 
                 if(direction != to) {
@@ -251,6 +261,12 @@ public:
                         clock_gettime(CLOCK_REALTIME, &tmp_ts);
                         tmp_ts.tv_sec += PASS_DELAY / 1000;
                         tmp_ts.tv_nsec += (PASS_DELAY % 1000) * 1000000;
+
+                        if (tmp_ts.tv_nsec >= 1000000000) {
+                            tmp_ts.tv_sec += tmp_ts.tv_nsec / 1000000000; 
+                            tmp_ts.tv_nsec %= 1000000000;                
+                        }
+                        
                         sleepCondition->timedwait(&tmp_ts);
 
                         // there was a direction change during the delay
