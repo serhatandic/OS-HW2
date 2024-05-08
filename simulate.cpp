@@ -180,6 +180,12 @@ public:
             ts.tv_sec += maxWaitTime / 1000;
             ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
 
+            if (ts.tv_nsec >= 1000000000) {
+                ts.tv_sec += ts.tv_nsec / 1000000000; 
+                ts.tv_nsec %= 1000000000;                
+            }
+
+
             int res = start_passing_condition->timedwait(&ts);
             if (res == ETIMEDOUT){
                 for (int i = 0; i < numOfCars - 1; i++){
@@ -304,7 +310,12 @@ public:
                 clock_gettime(CLOCK_REALTIME, &ts);
                 ts.tv_sec += maxWaitTime / 1000;
                 ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
-  
+
+                if (ts.tv_nsec >= 1000000000) {
+                    ts.tv_sec += ts.tv_nsec / 1000000000; 
+                    ts.tv_nsec %= 1000000000;                
+                }
+
                 int timeoutCounterPrev = timeoutCounter;
                 int result = directionCondition->timedwait(&ts);
 
