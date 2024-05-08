@@ -216,6 +216,7 @@ public:
 
     int numOfCarsPassing = 0;
 
+    int timeoutCounter = 0;    
     struct timespec lastSwitchTime;
 
     std::vector<int> numOfCarsMovingFrom = {0, 0, 0, 0};
@@ -224,7 +225,7 @@ public:
     pthread_mutex_t  mut2;
 
     Condition* lineCondition = new Condition(this);
-    std::vector<Condition*> directionConditions = {new Condition(this), new Condition(this), new Condition(this), new Condition(this)};
+    Condition* directionCondition = new Condition(this);
     Condition* sleepCondition = new Condition(this);
     Condition* waitReversePassingCars = new Condition(this);
     
@@ -296,7 +297,7 @@ public:
                 while (carsInLine[direction].empty() && numOfCarsMovingFrom[direction] == 0){
                     direction = (direction + 1) % 4;
                 }
-                directionConditions[direction]->notifyAll();
+                directionCondition->notifyAll();
                 // shouldBePassDelay = false;
             }else{
                 timespec ts;
@@ -304,14 +305,20 @@ public:
                 ts.tv_sec += maxWaitTime / 1000;
                 ts.tv_nsec += (maxWaitTime % 1000) * 1000000;
   
-                int result = directionConditions[from]->timedwait(&ts);
+                int timeoutCounterPrev = timeoutCounter;
+                int result = directionCondition->timedwait(&ts);
 
-                if(direction != from) {
+                if(timeoutCounterPrev == timeoutCounter){
+                    timeoutCounter++;
+                    // make sure timeoutCounter doesn't overflow
+                    if (timeoutCounter == 1000000){
+                        timeoutCounter = 0;
+                    }
                     if(result == ETIMEDOUT) {
                         while (carsInLine[direction].empty()){
                             direction = (direction + 1) % 4;
                         }
-                        directionConditions[direction]->notifyAll();
+                        directionCondition->notifyAll();
                     }
                     // shouldBePassDelay = false;
                 }
@@ -333,7 +340,7 @@ public:
                         break;
                     }
                 }
-                directionConditions[direction]->notifyAll();
+                directionCondition->notifyAll();
             }
             waitReversePassingCars->notifyAll();
         }
@@ -342,9 +349,7 @@ public:
     }
     ~Crossroad() {
         delete lineCondition;
-        for (auto condition : directionConditions) {
-            delete condition;
-        }
+        delete directionCondition;
     }
 };
 
