@@ -385,14 +385,14 @@ void initializeConnectorsAndCars() {
     std::cin >> numFerries;
     for (int i = 0; i < numFerries; ++i) {
         std::cin >> travelTime >> maxWaitTime >> capacity;
-        connectorMap['F'].push_back(dynamic_cast<Monitor*>(new Ferry(i + numNarrowBridges, travelTime, maxWaitTime, capacity)));
+        connectorMap['F'].push_back(dynamic_cast<Monitor*>(new Ferry(i, travelTime, maxWaitTime, capacity)));
     }
 
     // Reading crossroads
     std::cin >> numCrossroads;
     for (int i = 0; i < numCrossroads; ++i) {
         std::cin >> travelTime >> maxWaitTime;
-        connectorMap['C'].push_back(dynamic_cast<Monitor*>(new Crossroad(i + numNarrowBridges + numFerries, travelTime, maxWaitTime)));
+        connectorMap['C'].push_back(dynamic_cast<Monitor*>(new Crossroad(i, travelTime, maxWaitTime)));
     }
 
     // Reading cars
